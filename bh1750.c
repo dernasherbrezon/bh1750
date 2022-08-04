@@ -92,7 +92,15 @@ int bh1750_read(bh1750 *dev, float *value) {
 }
 
 int bh1750_reset(bh1750 *dev) {
-    //FIXME
+    // make sure mode is "power up"
+    __s32 code = i2c_smbus_write_byte(dev->file, BH1750_POWER_UP);
+    if (code < 0) {
+        return code;
+    }
+    code = i2c_smbus_write_byte(dev->file, BH1750_RESET);
+    if (code < 0) {
+        return code;
+    }
     return 0;
 }
 
