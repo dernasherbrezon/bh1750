@@ -8,9 +8,6 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <time.h>
-//FIXME for now
-#include <arpa/inet.h>
-#include <stdio.h>
 
 struct bh1750_t {
     int file;
@@ -39,9 +36,10 @@ int bh1750_create(const char *i2c_dev, int address, uint8_t mode, bh1750 **dev) 
     }
     // init all fields with 0 so that destroy_* method would work
     *result = (struct bh1750_t) {0};
+    result->file = -1;
     result->mode = mode;
     result->address = address;
-    result->measurement_time = 69;
+    result->measurement_time = BH1750_DEFAULT_MEASUREMENT_TIME;
     result->file = open(i2c_dev, O_RDWR);
     if (result->file < 0) {
         bh1750_destroy(result);
@@ -58,7 +56,7 @@ int bh1750_create(const char *i2c_dev, int address, uint8_t mode, bh1750 **dev) 
         bh1750_destroy(result);
         return -1;
     }
-    int code = bh1750_set_measurement_time(result, 69);
+    int code = bh1750_set_measurement_time(result, BH1750_DEFAULT_MEASUREMENT_TIME);
     if (code < 0) {
         bh1750_destroy(result);
         return code;
@@ -71,11 +69,11 @@ int bh1750_read(bh1750 *dev, float *value) {
     // if continuous mode then setup only once
     // if one-time mode then setup every time
     if ((dev->mode & 0x20) || dev->configured == false) {
-        __s32 ret = i2c_smbus_write_byte(dev->file, dev->mode);
-        if (ret < 0) {
-            return ret;
+        __s32 code = i2c_smbus_write_byte(dev->file, dev->mode);
+        if (code < 0) {
+            return code;
         }
-//        printf("all configured\n");
+        // continuous modes
         if (dev->mode & 0x10) {
             dev->configured = true;
         }
@@ -89,12 +87,32 @@ int bh1750_read(bh1750 *dev, float *value) {
     if (ret < 0) {
         return ret;
     }
-    *value = ntohs(ret) * dev->factor;
+    *value = (float) (ret >> 8 & 0xff | (ret << 8) & 0xff00) * dev->factor;
     return 0;
 }
 
 int bh1750_reset(bh1750 *dev) {
     //FIXME
+    return 0;
+}
+
+int bh1750_set_mtreg(bh1750 *dev, uint8_t value) {
+    __s32 code = i2c_smbus_write_byte(dev->file, BH1750_POWER_DOWN);
+    if (code < 0) {
+        return code;
+    }
+
+    code = i2c_smbus_write_byte(dev->file, 0x40 | ((value & 0xE0) >> 5));
+    if (code < 0) {
+        return code;
+    }
+
+    code = i2c_smbus_write_byte(dev->file, 0x60 | (value & 0x1F));
+    if (code < 0) {
+        return code;
+    }
+
+    dev->measurement_time = value;
     return 0;
 }
 
@@ -105,48 +123,35 @@ int bh1750_set_measurement_time(bh1750 *dev, uint8_t value) {
     }
     long maxMeasurementTime;
     if ((dev->mode & 0x3) == 0x3) {
-        dev->factor = 1 / 1.2f;
-        maxMeasurementTime = 24;
+        dev->factor = 1 / 1.2f * (BH1750_DEFAULT_MEASUREMENT_TIME / (float) value);
+        maxMeasurementTime = (long) ((24.0f / BH1750_DEFAULT_MEASUREMENT_TIME) * (float) value);
     } else {
-        dev->factor = 1 / 1.2f * (69.0f / (float) value);
+        dev->factor = 1 / 1.2f * (BH1750_DEFAULT_MEASUREMENT_TIME / (float) value);
         if (dev->mode & 0x01) {
             dev->factor = dev->factor / 2;
         }
-        maxMeasurementTime = (long) ((180 / 69.0f) * (float) value);
-
-        //FIXME should it be executed for low resolution?
-        if (dev->measurement_time != value) {
-            __s32 ret = i2c_smbus_write_byte(dev->file, BH1750_POWER_DOWN);
-            if (ret < 0) {
-                return ret;
-            }
-
-            ret = i2c_smbus_write_byte(dev->file, 0x40 | ((value & 0xE0) >> 5));
-            if (ret < 0) {
-                return ret;
-            }
-
-            ret = i2c_smbus_write_byte(dev->file, 0x60 | (value & 0x1F));
-            if (ret < 0) {
-                return ret;
-            }
-
-            dev->measurement_time = value;
-//            printf("measurement time configured\n");
+        maxMeasurementTime = (long) ((180.0f / BH1750_DEFAULT_MEASUREMENT_TIME) * (float) value);
+    }
+    if (dev->measurement_time != value) {
+        int code = bh1750_set_mtreg(dev, value);
+        if (code != 0) {
+            return code;
         }
     }
     dev->ts.tv_sec = 0;
     dev->ts.tv_nsec = maxMeasurementTime * 1000000;
-
-//    printf("factor: %f %lu\n", dev->factor, dev->ts.tv_nsec);
-
-
     return 0;
 }
 
 int bh1750_destroy(bh1750 *dev) {
     if (dev->file >= 0) {
-        i2c_smbus_write_byte(dev->file, BH1750_POWER_DOWN);
+        if (dev->configured) {
+            i2c_smbus_write_byte(dev->file, BH1750_POWER_DOWN);
+        }
+
+        if (dev->measurement_time != BH1750_DEFAULT_MEASUREMENT_TIME) {
+            bh1750_set_mtreg(dev, BH1750_DEFAULT_MEASUREMENT_TIME);
+        }
 
         int code = close(dev->file);
         if (code != 0) {

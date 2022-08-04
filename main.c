@@ -31,6 +31,10 @@ void run(const char *message, uint8_t mode, uint8_t measurement_time) {
 
 int main(int argc, char **argv) {
 
+    run("one time L  31", BH1750_ONE_TIME_L_RES_MODE, 31);
+    run("one time H  31", BH1750_ONE_TIME_H_RES_MODE, 31);
+    run("one time H2 31", BH1750_ONE_TIME_H_RES_MODE2, 31);
+
     run("one time L  69", BH1750_ONE_TIME_L_RES_MODE, 69);
     run("one time H  69", BH1750_ONE_TIME_H_RES_MODE, 69);
     run("one time H2 69", BH1750_ONE_TIME_H_RES_MODE2, 69);
@@ -38,10 +42,6 @@ int main(int argc, char **argv) {
     run("one time L  254", BH1750_ONE_TIME_L_RES_MODE, 254);
     run("one time H  254", BH1750_ONE_TIME_H_RES_MODE, 254);
     run("one time H2 254", BH1750_ONE_TIME_H_RES_MODE2, 254);
-
-    run("continuous L  69", BH1750_CONTINUOUSLY_L_RES_MODE, 69);
-    run("continuous H  69", BH1750_CONTINUOUSLY_H_RES_MODE, 69);
-    run("continuous H2 69", BH1750_CONTINUOUSLY_H_RES_MODE2, 69);
 
     return EXIT_SUCCESS;
 }
