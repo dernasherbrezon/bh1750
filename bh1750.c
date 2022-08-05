@@ -21,14 +21,17 @@ struct bh1750_t {
 };
 
 int bh1750_create(const char *i2c_dev, int address, uint8_t mode, bh1750 **dev) {
-    if (mode != BH1750_CONTINUOUSLY_L_RES_MODE &&
-        mode != BH1750_CONTINUOUSLY_H_RES_MODE &&
-        mode != BH1750_CONTINUOUSLY_H_RES_MODE2 &&
-        mode != BH1750_ONE_TIME_L_RES_MODE &&
-        mode != BH1750_ONE_TIME_H_RES_MODE &&
-        mode != BH1750_ONE_TIME_H_RES_MODE2) {
-        errno = EINVAL;
-        return -1;
+    switch (mode) {
+        case BH1750_CONTINUOUSLY_L_RES_MODE:
+        case BH1750_CONTINUOUSLY_H_RES_MODE:
+        case BH1750_CONTINUOUSLY_H_RES_MODE2:
+        case BH1750_ONE_TIME_L_RES_MODE:
+        case BH1750_ONE_TIME_H_RES_MODE:
+        case BH1750_ONE_TIME_H_RES_MODE2:
+            break;
+        default:
+            errno = EINVAL;
+            return -1;
     }
     struct bh1750_t *result = malloc(sizeof(struct bh1750_t));
     if (result == NULL) {
